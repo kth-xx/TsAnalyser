@@ -2,7 +2,7 @@
 
 namespace TsAnalyser.Metrics
 {
-    internal class DataPacket
+    internal struct DataPacket
     {
         public byte[] DataPayload { get; set; }
 

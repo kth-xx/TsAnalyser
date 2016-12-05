@@ -17,8 +17,6 @@ namespace TsAnalyser.Logging
 
         [DataMember]
         public RtpMetric Rtp { get; set; }
-
-        [DataMember]
-        public TsMetric Ts { get; set; }
+        
     }
 }
