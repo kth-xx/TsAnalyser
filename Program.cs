@@ -54,7 +54,7 @@ namespace TsAnalyser
 
         private static readonly object HistoricalFileLock = new object();
         private static bool _historicalBufferFlushing;
-        
+
         private static readonly RingBuffer RingBuffer = new RingBuffer();
         private static readonly Queue<DataPacket> HistoricalBuffer = new Queue<DataPacket>(HistoricaBufferSize);
         private static ulong _lastPcr;
@@ -63,6 +63,8 @@ namespace TsAnalyser
         private static List<PidMetric> _pidMetrics = new List<PidMetric>();
         private static TsDecoder _tsDecoder;
         private static TeleTextDecoder _ttxDecoder;
+
+        private static TeletextPage _decodedSubtitlePage;
 
         private static readonly StringBuilder ConsoleDisplay = new StringBuilder(1024);
         private static int _lastPrintedTsCount;
@@ -150,7 +152,7 @@ namespace TsAnalyser
         {
             Console.CancelKeyPress += Console_CancelKeyPress;
 
-            LogSetup.ConfigureLogger("tsanalyser", opts.OrganizationId, opts.DescriptorTags,"https://telemetry.cinegy.com", opts.TelemetryEnabled);
+            LogSetup.ConfigureLogger("tsanalyser", opts.OrganizationId, opts.DescriptorTags, "https://telemetry.cinegy.com", opts.TelemetryEnabled);
 
             var location = Assembly.GetExecutingAssembly().Location;
 
@@ -189,7 +191,7 @@ namespace TsAnalyser
                 _receiving = true;
 
                 LogMessage($"Logging started {Assembly.GetExecutingAssembly().GetName().Version}.");
-                
+
                 _periodicDataTimer = new Timer(UpdateSeriesDataTimerCallback, null, 0, 5000);
 
                 SetupMetricsAndDecoders();
@@ -218,7 +220,7 @@ namespace TsAnalyser
                     PrintConsoleFeedback();
                 }
 
-               Thread.Sleep(20);
+                Thread.Sleep(20);
             }
 
             LogMessage("Logging stopped.");
@@ -267,9 +269,9 @@ namespace TsAnalyser
 
             lock (_pidMetrics)
             {
-                var span = new TimeSpan((long)(_lastPcr/2.7));
+                var span = new TimeSpan((long)(_lastPcr / 2.7));
                 PrintToConsole(_lastPcr > 0 ? $"\nPCR Value: {span}\n----------------" : "\n\n");
-                
+
                 PrintToConsole(_pidMetrics.Count < 10
                     ? $"\nPID Details - Unique PIDs: {_pidMetrics.Count}\n----------------"
                     : $"\nPID Details - Unique PIDs: {_pidMetrics.Count}, (10 shown by packet count)\n----------------");
@@ -345,34 +347,35 @@ namespace TsAnalyser
 
         private static void PrintTeletext()
         {
-            lock (_ttxDecoder.TeletextDecodedSubtitlePage)
+            if (_decodedSubtitlePage == null) return;
+
+            lock (_decodedSubtitlePage)
             {
-                PrintToConsole($"\nTeleText Subtitles - decoding from Service ID {_ttxDecoder.ProgramNumber}, PID: {_ttxDecoder.TeletextPid}\n----------------");
+                //TODO: Some mechanism somehow needs to filter packets (stops flashing)
+                //TODO: Line needs to really point at service, not just PID repeated (needs extension of TTX lib)
+                PrintToConsole($"\nTeleText Subtitles - decoding from Service ID {_decodedSubtitlePage.ParentMagazine.ParentService.TeletextPid}, PID: {_decodedSubtitlePage.ParentMagazine.ParentService.TeletextPid}\n----------------");
 
-                foreach (var page in _ttxDecoder.TeletextDecodedSubtitlePage.Keys)
+                PrintToConsole($"Live Decoding Page {_decodedSubtitlePage.PageNum:X}\n");
+
+                //some strangeness here to get around the fact we just append to console, to clear out
+                //a fixed 4 lines of space for TTX render
+                const string clearLine = "\t\t\t\t\t\t\t\t\t";
+                var ttxRender = new[] { clearLine, clearLine, clearLine, clearLine };
+
+                var i = 0;
+
+                foreach (var row in _decodedSubtitlePage.Rows)
                 {
-                    PrintToConsole($"Live Decoding Page {page:X}\n");
-
-                    //some strangeness here to get around the fact we just append to console, to clear out
-                    //a fixed 4 lines of space for TTX render
-                    const string clearLine = "\t\t\t\t\t\t\t\t\t";
-                    var ttxRender = new[] { clearLine, clearLine, clearLine, clearLine };
-
-                    var i = 0;
-
-                    foreach (var line in _ttxDecoder.TeletextDecodedSubtitlePage[page])
+                    if (row.IsChanged() && !IsNullOrWhiteSpace(row.GetPlainRow()))
                     {
-                        if (IsNullOrEmpty(line) || IsNullOrEmpty(line.Trim()) || i >= ttxRender.Length)
-                            continue;
-
-                        ttxRender[i] = $"{new string(line.Where(c => !char.IsControl(c)).ToArray())}\t\t\t";
+                        ttxRender[i] = $"{row.GetPlainRow()}\t\t\t";
                         i++;
                     }
+                }
 
-                    foreach (var val in ttxRender)
-                    {
-                        PrintToConsole(val);
-                    }
+                foreach (var val in ttxRender)
+                {
+                    PrintToConsole(val);
                 }
             }
         }
@@ -493,7 +496,7 @@ namespace TsAnalyser
                 {
                     //need to trim down buffer
                     var tmpArry = new byte[dataSize];
-                    Buffer.BlockCopy(dataBuffer,0,tmpArry,0,dataSize);
+                    Buffer.BlockCopy(dataBuffer, 0, tmpArry, 0, dataSize);
                     dataBuffer = tmpArry;
                 }
 
@@ -552,18 +555,18 @@ namespace TsAnalyser
 
                             if (tsPackets == null)
                             {
-                                Logger.Log(new TelemetryLogEventInfo() {Message = "Packet recieved with no detected TS packets",Level = LogLevel.Info, Key="Packet"});
+                                Logger.Log(new TelemetryLogEventInfo() { Message = "Packet recieved with no detected TS packets", Level = LogLevel.Info, Key = "Packet" });
                                 continue;
                             }
 
-                        AnalysePackets(tsPackets);
+                            AnalysePackets(tsPackets);
                         }
                         catch (Exception ex)
                         {
-                             Logger.Log(new TelemetryLogEventInfo() {Message = $"Exception processing TS packet: {ex.Message}", Key= "Packet" , Level = LogLevel.Warn});   
+                            Logger.Log(new TelemetryLogEventInfo() { Message = $"Exception processing TS packet: {ex.Message}", Key = "Packet", Level = LogLevel.Warn });
                         }
 
-                        
+
                     }
                 }
                 catch (Exception ex)
@@ -613,7 +616,7 @@ namespace TsAnalyser
                         if (_ttxDecoder == null) continue;
                         lock (_ttxDecoder)
                         {
-                            _ttxDecoder.AddPacket(_tsDecoder, tsPacket);
+                            _ttxDecoder.AddPacket(tsPacket, _tsDecoder);
                         }
                     }
                 }
@@ -761,8 +764,8 @@ namespace TsAnalyser
                                 Level = LogLevel.Error,
                                 Key = "Rate"
                             });
-                        
-                        _historicalBufferFlushing = false;
+
+                            _historicalBufferFlushing = false;
                             return;
                         }
 
@@ -801,7 +804,7 @@ namespace TsAnalyser
                     Level = LogLevel.Info,
                     Key = "IO"
                 });
-                
+
                 _historicalBufferFlushing = false;
                 Console.Clear();
             }
@@ -856,7 +859,7 @@ namespace TsAnalyser
                 };
 
                 Logger.Log(lei);
-                
+
             }
             catch (Exception)
             {
@@ -900,10 +903,21 @@ namespace TsAnalyser
                 if (_options.DecodeTeletext)
                 {
                     _ttxDecoder = _options.ProgramNumber > 1 ? new TeleTextDecoder(_options.ProgramNumber) : new TeleTextDecoder();
+                    _ttxDecoder.TeletextService.TeletextPageReady += TeletextService_TeletextPageReady;
                 }
 
 
             }
+        }
+
+        private static void TeletextService_TeletextPageReady(object sender, EventArgs e)
+        {
+            var ttxE = (TeleTextPageReadyEventArgs)e;
+
+            if (ttxE == null) return;
+
+            _decodedSubtitlePage = ttxE.Page;
+
         }
 
         private static void _tsDecoder_TableChangeDetected(object sender, TableChangedEventArgs e)
@@ -914,7 +928,7 @@ namespace TsAnalyser
                 Level = LogLevel.Info,
                 Key = "TableChange"
             });
-            
+
             Console.Clear();
         }
 
