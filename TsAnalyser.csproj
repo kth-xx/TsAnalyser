@@ -46,8 +46,8 @@
       <HintPath>packages\Cinegy.TsDecoder.2.0.47-alpha\lib\netstandard1.3\Cinegy.TsDecoder.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Cinegy.TtxDecoder, Version=2.0.21.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\Cinegy.TtxDecoder.2.0.21-alpha1\lib\netstandard1.3\Cinegy.TtxDecoder.dll</HintPath>
+    <Reference Include="Cinegy.TtxDecoder, Version=2.0.22.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\Cinegy.TtxDecoder.2.0.22-alpha1\lib\netstandard1.3\Cinegy.TtxDecoder.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="CommandLine, Version=2.0.275.0, Culture=neutral, PublicKeyToken=de6f01bd326f8c32, processorArchitecture=MSIL">

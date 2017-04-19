@@ -351,9 +351,19 @@ namespace TsAnalyser
 
             lock (_decodedSubtitlePage)
             {
-                //TODO: Some mechanism somehow needs to filter packets (stops flashing)
-                //TODO: Line needs to really point at service, not just PID repeated (needs extension of TTX lib)
-                PrintToConsole($"\nTeleText Subtitles - decoding from Service ID {_decodedSubtitlePage.ParentMagazine.ParentService.TeletextPid}, PID: {_decodedSubtitlePage.ParentMagazine.ParentService.TeletextPid}\n----------------");
+                var defaultLang = _decodedSubtitlePage.ParentMagazine.ParentService.AssociatedDescriptor.Languages.FirstOrDefault();
+
+                var m = defaultLang.TeletextMagazineNumber;
+                if (m == 0) m = 8;
+
+                //TODO: Some mechanism somehow needs to filter packets (stops flashing) - below is hacked while pagefilter does not filter
+                _decodedSubtitlePage.ParentMagazine.ParentService.MagazineFilter = m;
+                _decodedSubtitlePage.ParentMagazine.ParentService.PageFilter = defaultLang.TeletextPageNumber;
+
+              
+                if (_decodedSubtitlePage.PageNum != ((m << 8) | defaultLang.TeletextPageNumber)) return;
+
+                PrintToConsole($"\nTeleText Subtitles ({defaultLang.Iso639LanguageCode})- decoding from Service ID {_decodedSubtitlePage.ParentMagazine.ParentService.ProgramNumber}, PID: {_decodedSubtitlePage.ParentMagazine.ParentService.TeletextPid}\n----------------");
 
                 PrintToConsole($"Live Decoding Page {_decodedSubtitlePage.PageNum:X}\n");
 
@@ -903,7 +913,7 @@ namespace TsAnalyser
                 if (_options.DecodeTeletext)
                 {
                     _ttxDecoder = _options.ProgramNumber > 1 ? new TeleTextDecoder(_options.ProgramNumber) : new TeleTextDecoder();
-                    _ttxDecoder.TeletextService.TeletextPageReady += TeletextService_TeletextPageReady;
+                    _ttxDecoder.Service.TeletextPageReady += TeletextService_TeletextPageReady;
                 }
 
 
